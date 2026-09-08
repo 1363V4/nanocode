@@ -1,3 +1,5 @@
+> i'm in the middle of rewriting this fork, don't use yet
+
 # nanocode
 
 Minimal Claude Code alternative. Single Python file, zero dependencies, ~250 lines.
