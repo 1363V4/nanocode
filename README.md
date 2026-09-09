@@ -1,5 +1,6 @@
 > I forked this tool to make it compatible with OpenRouter (it's cheaper than Claude Code).
-> I also added some QoL improvements, like settings and memory.
+
+> I also added some QoL improvements, like settings, system prompt, and memory.
 
 # nanocode
 
@@ -17,7 +18,7 @@ Minimal Claude Code alternative.
 1. `git clone` this repo
 2. Add a `.env` file with your OpenRouter API key: `OPENROUTER_API_KEY="your-key"`
 3. (Optional) Modify `settings.json` and `SYSTEM.md` to your convenience.
-4.. Run `uv run nanocode.py`
+4. Run `uv run nanocode.py`
 
 ## Commands
 
