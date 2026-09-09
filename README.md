@@ -1,12 +1,9 @@
-> i'm in the middle of rewriting this fork, don't use yet
+> I forked this tool to make it compatible with OpenRouter (it's cheaper than Claude Code).
+> I also added some QoL improvements, like settings and memory.
 
 # nanocode
 
-Minimal Claude Code alternative. Single Python file, zero dependencies, ~250 lines.
-
-Built using Claude Code, then used to build itself.
-
-![screenshot](screenshot.png)
+Minimal Claude Code alternative. 
 
 ## Features
 
@@ -17,27 +14,10 @@ Built using Claude Code, then used to build itself.
 
 ## Usage
 
-```bash
-export ANTHROPIC_API_KEY="your-key"
-python nanocode.py
-```
-
-### OpenRouter
-
-Use [OpenRouter](https://openrouter.ai) to access any model:
-
-```bash
-export OPENROUTER_API_KEY="your-key"
-python nanocode.py
-```
-
-To use a different model:
-
-```bash
-export OPENROUTER_API_KEY="your-key"
-export MODEL="openai/gpt-5.2"
-python nanocode.py
-```
+1. `git clone` this repo
+2. Add a `.env` file with your OpenRouter API key: `OPENROUTER_API_KEY="your-key"`
+3. (Optional) Modify `settings.json` and `SYSTEM.md` to your convenience.
+4.. Run `uv run nanocode.py`
 
 ## Commands
 
@@ -67,7 +47,3 @@ python nanocode.py
 
 ⏺ There's one Python file: nanocode.py
 ```
-
-## License
-
-MIT

@@ -1,32 +1,62 @@
 """nanocode - minimal claude code alternative (1363V4 fork)"""
 
-import glob as globlib, json, os, re, subprocess
+import json, os, re, subprocess
+import glob as globlib
 from dotenv import load_dotenv
 from openai import OpenAI, APIError
 
 
-load_dotenv()
+# --- Settings ---
+
+DEFAULT_SETTINGS = {
+    "model": "anthropic/claude-sonnet-5",
+    "show_cost": True,
+    "show_tokens": True,
+    "system_file": "SYSTEM.md",
+    "memory_file": "MEMORY.md",
+    "memory_max_chars": 4000,
+}
 
 def load_settings():
-    defaults = {
-        "model": "anthropic/claude-sonnet-5",
-        "show_cost": True,
-        "show_tokens": True,
-    }
+    defaults = {}
     try:
         with open("settings.json") as f:
             defaults.update(json.load(f))
     except FileNotFoundError:
         pass
-    return defaults
-
+    return DEFAULT_SETTINGS | defaults
 
 SETTINGS = load_settings()
-MODEL = os.environ.get("MODEL", SETTINGS["model"])
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.environ["OPENROUTER_API_KEY"],
-)
+
+
+def build_system_prompt():
+    parts = []
+    system_file = SETTINGS.get("system_file") or "SYSTEM.md"
+    if system_file:
+        try:
+            text = open(system_file, encoding="utf-8").read().strip()
+            if text:
+                parts.append(text)
+        except (OSError, UnicodeDecodeError):
+            pass
+    memory_file = SETTINGS.get("memory_file") or "MEMORY.md"
+    if memory_file:
+        try:
+            text = open(memory_file, encoding="utf-8").read()
+            cap = SETTINGS.get("memory_max_chars", 4000)
+            if len(text) > cap:
+                text = text[:cap] + "\n...(truncated)"
+            if text.strip():
+                parts.append(
+                    f"Project memory ({memory_file}) - you may update this file "
+                    "when you learn durable facts:\n" + text
+                )
+        except (OSError, UnicodeDecodeError):
+            pass
+    if parts:
+        return "\n\n".join(parts)
+    return f"Concise coding assistant. cwd: {os.getcwd()}"
+
 
 # ANSI colors
 RESET, BOLD, DIM = "\033[0m", "\033[1m", "\033[2m"
@@ -36,6 +66,14 @@ BLUE, CYAN, GREEN, YELLOW, RED = (
     "\033[32m",
     "\033[33m",
     "\033[31m",
+)
+
+load_dotenv()
+
+MODEL = os.environ.get("MODEL", SETTINGS["model"])
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ["OPENROUTER_API_KEY"],
 )
 
 
@@ -228,8 +266,16 @@ def render_markdown(text):
 
 
 def main():
-    print(f"{BOLD}nanocode{RESET} | {DIM}{MODEL} (OpenRouter) | {os.getcwd()}{RESET}\n")
-    messages = [{"role": "system", "content": f"Concise coding assistant. cwd: {os.getcwd()}"}]
+    loaded = [
+        f
+        for f in (SETTINGS.get("system_file") or "SYSTEM.md", SETTINGS.get("memory_file") or "MEMORY.md")
+        if os.path.isfile(f)
+    ]
+    banner = f"{BOLD}nanocode{RESET} | {DIM}{MODEL} (OpenRouter) | {os.getcwd()}{RESET}"
+    if loaded:
+        banner += f" | {DIM}{', '.join(loaded)}{RESET}"
+    print(banner + "\n")
+    messages = [{"role": "system", "content": build_system_prompt()}]
     session = {"tokens": 0, "cost": 0.0}
 
     while True:

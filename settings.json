@@ -1,5 +1,8 @@
 {
-    "model": "deepseek/deepseek-v4-flash-0731",
-    "show_cost": true,
-    "show_tokens": true
+  "model": "deepseek/deepseek-v4-flash-0731",
+  "show_cost": true,
+  "show_tokens": true,
+  "system_file": "SYSTEM.md",
+  "memory_file": "MEMORY.md",
+  "memory_max_chars": 4000
 }
