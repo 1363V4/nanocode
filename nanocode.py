@@ -55,7 +55,7 @@ def build_system_prompt():
         path = Path(memory_file).expanduser()
         try:
             text = path.read_text(encoding="utf-8")
-            cap = SETTINGS.get("memory_max_chars", 4000)
+            cap = SETTINGS["memory_max_chars"]
             if len(text) > cap:
                 text = text[:cap] + "\n...(truncated)"
             if text.strip():
