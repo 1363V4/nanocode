@@ -1,61 +1,73 @@
 """nanocode - minimal claude code alternative (1363V4 fork)"""
 
-import json, os, re, subprocess
-import glob as globlib
+import json, os, re, select, subprocess, time
+from pathlib import Path
+
 from dotenv import load_dotenv
 from openai import OpenAI, APIError
 
 
 # --- Settings ---
 
+NANOCODE_FOLDER = Path(__file__).resolve().parent
+DEFAULT_ENV_PATH = (NANOCODE_FOLDER / ".env").as_posix()
+
+DEFAULT_SYSTEM_PATH = (Path.cwd() / "SYSTEM.md").as_posix()
+DEFAULT_MEMORY_PATH = (Path.cwd() / "MEMORY.md").as_posix()
+
 DEFAULT_SETTINGS = {
     "model": "anthropic/claude-sonnet-5",
     "show_cost": True,
     "show_tokens": True,
-    "system_file": "SYSTEM.md",
-    "memory_file": "MEMORY.md",
+    "max_tokens": 8192,
+    "system_file": DEFAULT_SYSTEM_PATH,
+    "memory_file": DEFAULT_MEMORY_PATH,
     "memory_max_chars": 4000,
+    ".env": DEFAULT_ENV_PATH,
+    "bash_timeout": 30, # s
 }
 
 def load_settings():
     defaults = {}
     try:
-        with open("settings.json") as f:
-            defaults.update(json.load(f))
+        defaults.update(json.loads(Path("settings.json").read_text()))
     except FileNotFoundError:
         pass
     return DEFAULT_SETTINGS | defaults
+
 
 SETTINGS = load_settings()
 
 
 def build_system_prompt():
     parts = []
-    system_file = SETTINGS.get("system_file") or "SYSTEM.md"
+    system_file = SETTINGS.get("system_file")
     if system_file:
+        path = Path(system_file).expanduser()
         try:
-            text = open(system_file, encoding="utf-8").read().strip()
+            text = path.read_text(encoding="utf-8").strip()
             if text:
                 parts.append(text)
         except (OSError, UnicodeDecodeError):
             pass
-    memory_file = SETTINGS.get("memory_file") or "MEMORY.md"
+    memory_file = SETTINGS.get("memory_file")
     if memory_file:
+        path = Path(memory_file).expanduser()
         try:
-            text = open(memory_file, encoding="utf-8").read()
+            text = path.read_text(encoding="utf-8")
             cap = SETTINGS.get("memory_max_chars", 4000)
             if len(text) > cap:
                 text = text[:cap] + "\n...(truncated)"
             if text.strip():
                 parts.append(
-                    f"Project memory ({memory_file}) - you may update this file "
+                    f"Agent memory ({memory_file}) - you may update this file "
                     "when you learn durable facts:\n" + text
                 )
         except (OSError, UnicodeDecodeError):
             pass
     if parts:
         return "\n\n".join(parts)
-    return f"Concise coding assistant. cwd: {os.getcwd()}"
+    return f"Concise coding assistant. OS: {os.name}. cwd: {Path.cwd()}"
 
 
 # ANSI colors
@@ -68,7 +80,7 @@ BLUE, CYAN, GREEN, YELLOW, RED = (
     "\033[31m",
 )
 
-load_dotenv()
+load_dotenv(Path(SETTINGS[".env"]))
 
 MODEL = os.environ.get("MODEL", SETTINGS["model"])
 client = OpenAI(
@@ -81,7 +93,7 @@ client = OpenAI(
 
 
 def read(args):
-    lines = open(args["path"]).readlines()
+    lines = Path(args["path"]).read_text(encoding="utf-8").splitlines()
     offset = args.get("offset", 0)
     limit = args.get("limit", len(lines))
     selected = lines[offset : offset + limit]
@@ -89,13 +101,13 @@ def read(args):
 
 
 def write(args):
-    with open(args["path"], "w") as f:
-        f.write(args["content"])
+    Path(args["path"]).write_text(args["content"], encoding="utf-8")
     return "ok"
 
 
 def edit(args):
-    text = open(args["path"]).read()
+    path = Path(args["path"])
+    text = path.read_text(encoding="utf-8")
     old, new = args["old"], args["new"]
     if old not in text:
         return "error: old_string not found"
@@ -105,28 +117,30 @@ def edit(args):
     replacement = (
         text.replace(old, new) if args.get("all") else text.replace(old, new, 1)
     )
-    with open(args["path"], "w") as f:
-        f.write(replacement)
+    path.write_text(replacement, encoding="utf-8")
     return "ok"
 
 
 def glob(args):
-    pattern = (args.get("path", ".") + "/" + args["pat"]).replace("//", "/")
-    files = globlib.glob(pattern, recursive=True)
+    pattern = (Path(args.get("path", ".")) / args["pat"]).as_posix()
     files = sorted(
-        files,
-        key=lambda f: os.path.getmtime(f) if os.path.isfile(f) else 0,
+        Path(".").glob(pattern),
+        key=lambda p: p.stat().st_mtime if p.is_file() else 0,
         reverse=True,
     )
-    return "\n".join(files) or "none"
+    return "\n".join(map(str, files)) or "none"
 
 
 def grep(args):
     pattern = re.compile(args["pat"])
     hits = []
-    for filepath in globlib.glob(args.get("path", ".") + "/**", recursive=True):
+    for filepath in Path(args.get("path", ".")).rglob("*"):
         try:
-            for line_num, line in enumerate(open(filepath), 1):
+            if not filepath.is_file():
+                continue
+            for line_num, line in enumerate(
+                filepath.read_text(encoding="utf-8").splitlines(), 1
+            ):
                 if pattern.search(line):
                     hits.append(f"{filepath}:{line_num}:{line.rstrip()}")
         except Exception:
@@ -141,18 +155,26 @@ def bash(args):
         text=True
     )
     output_lines = []
-    try:
-        while True:
+    start = time.time()
+    timeout = SETTINGS.get("bash_timeout", 30)
+
+    while True:
+        remaining = timeout - (time.time() - start)
+        if remaining <= 0:
+            proc.kill()
+            output_lines.append("\n(timed out after %ds)" % timeout)
+            break
+        ready, _, _ = select.select([proc.stdout], [], [], remaining)
+        if ready:
             line = proc.stdout.readline()
             if not line and proc.poll() is not None:
                 break
             if line:
                 print(f"  {DIM}│ {line.rstrip()}{RESET}", flush=True)
                 output_lines.append(line)
-        proc.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        output_lines.append("\n(timed out after 30s)")
+        elif proc.poll() is not None:
+            break
+
     return "".join(output_lines).strip() or "(empty)"
 
 
@@ -232,7 +254,7 @@ def make_schema():
 def call_api(messages):
     return client.chat.completions.create(
         model=MODEL,
-        max_tokens=8192,
+        max_tokens=SETTINGS["max_tokens"],
         messages=messages,
         tools=make_schema(),
         extra_body={"usage": {"include": True}},
@@ -268,10 +290,10 @@ def render_markdown(text):
 def main():
     loaded = [
         f
-        for f in (SETTINGS.get("system_file") or "SYSTEM.md", SETTINGS.get("memory_file") or "MEMORY.md")
-        if os.path.isfile(f)
+        for f in (SETTINGS.get("system_file"), SETTINGS.get("memory_file"))
+        if f
     ]
-    banner = f"{BOLD}nanocode{RESET} | {DIM}{MODEL} (OpenRouter) | {os.getcwd()}{RESET}"
+    banner = f"{BOLD}nanocode{RESET} | {DIM}{MODEL} (OpenRouter)"
     if loaded:
         banner += f" | {DIM}{', '.join(loaded)}{RESET}"
     print(banner + "\n")
@@ -288,7 +310,7 @@ def main():
             if user_input in ("/q", "exit"):
                 break
             if user_input == "/c":
-                messages = messages[:1]  # keep system prompt, drop history
+                messages = [{"role": "system", "content": build_system_prompt()}]  # rebuild prompt, memory may have changed
                 print(f"{GREEN}⏺ Cleared conversation{RESET}")
                 continue
 

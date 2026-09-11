@@ -28,7 +28,8 @@ Minimal Claude Code alternative.
 ## Tools
 
 | Tool | Description |
-|------|-------------|
+|------
+|-------------|
 | `read` | Read file with line numbers, offset/limit |
 | `write` | Write content to file |
 | `edit` | Replace string in file (must be unique) |
@@ -48,3 +49,29 @@ Minimal Claude Code alternative.
 
 ⏺ There's one Python file: nanocode.py
 ```
+
+## Using nanocode from another directory
+
+Let's say for example that you cloned nanocode repository on your home folder.
+
+To use it on a project in another folder, simply call:
+
+```bash
+uv run --project ~/nanocode/ ~/nanocode/nanocode.py
+```
+
+from your folder.
+
+By default, nanocode will look for the `.env` file in its own folder, and for a SYSTEM and MEMORY file in the current folder.
+
+This can be changed via creating a `settings.json` in your project. For example:
+
+```json
+{
+  "model": "deepseek/deepseek-v4-flash-0731",
+  "system_file": "~/skills/WEBDEV.md",
+  "memory_file": "NANO_MEMORY.md"
+}
+```
+
+will load a different model, use a skill from your folder and write in the specified file in your folder.
