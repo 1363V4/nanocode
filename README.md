@@ -4,7 +4,7 @@
 
 # nanocode
 
-Minimal Claude Code alternative. 
+Minimal Claude Code alternative.
 
 ## Features
 
@@ -23,7 +23,7 @@ Minimal Claude Code alternative.
 ## Commands
 
 - `/c` - Clear conversation
-- `/q` or `exit` - Quit
+- `/q` - Quit
 
 ## Tools
 
