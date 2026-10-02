@@ -28,8 +28,7 @@ Minimal Claude Code alternative.
 ## Tools
 
 | Tool | Description |
-|------
-|-------------|
+|------|-------------|
 | `read` | Read file with line numbers, offset/limit |
 | `write` | Write content to file |
 | `edit` | Replace string in file (must be unique) |
